@@ -1,7 +1,10 @@
 # serve.py
 from waitress import serve
-from ml_api_app import app  # iyong Flask app
+from ml_api_app import app
+import os
 
-print("Models loaded. Starting server...")  # <- dagdag na ito
+port = int(os.environ.get("PORT", 5000))  # Use Render's PORT if available
+host = "0.0.0.0"
 
-serve(app, host="0.0.0.0", port=5000)
+print(f"Models loaded. Starting server on {host}:{port}...")
+serve(app, host=host, port=port)
