@@ -54,7 +54,7 @@ six==1.17.0
 sympy==1.14.0
 threadpoolctl==3.6.0
 tokenizers==0.22.2
-torch==2.10.0+cpu --index-url https://download.pytorch.org/whl/cpu
+torch==2.10.0
 tqdm==4.67.3
 transformers==5.2.0
 typer==0.24.1
@@ -66,6 +66,7 @@ Werkzeug==3.1.6
 xgboost==3.2.0
 xxhash==3.6.0
 yarl==1.23.0
+
 
 
 
