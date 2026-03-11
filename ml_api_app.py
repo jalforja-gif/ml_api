@@ -1,4 +1,4 @@
-# ml_api.py
+# ml_api_app.py
 from flask import Flask, request, jsonify
 from sentence_transformers import SentenceTransformer, util
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -9,29 +9,22 @@ import numpy as np
 app = Flask(__name__)
 
 # ==============================
-# LOAD MODELS
+# LOAD MODELS ONCE
 # ==============================
 
-# ✅ Sentence-BERT for similarity
-similarity_model = SentenceTransformer('all-MiniLM-L6-v2')
+print("Loading ML models...")
 
-# ✅ Real BERT classifier (you can fine-tune later)
-# ✅ Real BERT classifier (public demo model)
-bert_model_path = "models/bert_classifier"  # public model
+# SBERT
+similarity_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+
+# BERT classifier
+bert_model_path = "models/bert_classifier"
 tokenizer = AutoTokenizer.from_pretrained(bert_model_path)
 bert_model = AutoModelForSequenceClassification.from_pretrained(bert_model_path)
 
-# Label mapping
-LABELS = [
-    "Copyright",
-    "Patent",
-    "Trademark",
-    "Utility Model",
-    "Industrial Design"
-]
+LABELS = ["Copyright", "Patent", "Trademark", "Utility Model", "Industrial Design"]
 
-# ✅ XGBoost readiness model (demo trained)
-# ✅ XGBoost readiness model (demo)
+# XGBoost (optional)
 xgb_model = xgb.XGBRegressor()
 try:
     xgb_model.load_model("models/xgb_readiness.json")
@@ -39,67 +32,52 @@ except FileNotFoundError:
     print("Warning: xgb_readiness.json not found. Using fallback readiness predictor.")
     xgb_model = None
 
-# ==============================
-# BERT CLASSIFICATION (REAL)
-# ==============================
-def classify_ip_bert(text):
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        padding=True
-    )
+print("Models loaded successfully!")
 
+# ==============================
+# UTIL FUNCTIONS
+# ==============================
+
+def classify_ip_bert(text):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
         outputs = bert_model(**inputs)
         probs = torch.softmax(outputs.logits, dim=1)
         pred = torch.argmax(probs, dim=1).item()
-
     return LABELS[pred], probs[0].tolist()
 
-# ==============================
-# READINESS VIA XGBOOST
-# ==============================
 def predict_readiness(similarity_score):
     features = np.array([[similarity_score]])
-    if xgb_model is not None:
+    if xgb_model:
         try:
             return float(xgb_model.predict(features)[0])
         except:
             pass
-    # fallback if model missing or fails
     return round(1 - similarity_score, 4)
 
 # ==============================
-# API ENDPOINT
+# API ENDPOINTS
 # ==============================
-@app.route('/predict', methods=['POST'])
+
+@app.route("/predict", methods=["POST"])
 def predict():
     data = request.get_json()
+    title = data.get("title", "")
+    abstracts = data.get("existing_abstracts", [])
 
-    title = data.get('title', '')
-    abstracts = data.get('existing_abstracts', [])
-
-    # ==============================
-    # 1. BERT CLASSIFICATION
-    # ==============================
+    # 1️⃣ BERT classification
     suggested_classification, class_probs = classify_ip_bert(title)
 
-    # ==============================
-    # 2. SBERT SIMILARITY
-    # ==============================
-    title_embedding = similarity_model.encode(title, convert_to_tensor=True)
-
+    # 2️⃣ SBERT similarity
+    title_emb = similarity_model.encode(title, convert_to_tensor=True)
     max_similarity = 0.0
     for text in abstracts:
         emb = similarity_model.encode(text, convert_to_tensor=True)
-        sim = util.pytorch_cos_sim(title_embedding, emb).item()
+        sim = util.pytorch_cos_sim(title_emb, emb).item()
         if sim > max_similarity:
             max_similarity = sim
 
-    # ==============================
-    # 3. XGBOOST READINESS
-    # ==============================
+    # 3️⃣ XGBoost readiness
     readiness = predict_readiness(max_similarity)
 
     return jsonify({
@@ -107,17 +85,9 @@ def predict():
         "classification_confidence": max(class_probs),
         "similarity_score": round(max_similarity, 4),
         "readiness_score": round(readiness, 4),
-        "embedding": title_embedding.cpu().tolist()
+        "embedding": title_emb.cpu().tolist()
     })
 
-@app.route('/ping')
+@app.route("/ping")
 def ping():
     return "ML API is running!"
-
-# ==============================
-# RUN SERVER
-# ==============================
-if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host="0.0.0.0", port=port)
