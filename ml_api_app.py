@@ -15,7 +15,7 @@ app = Flask(__name__)
 print("Loading ML models...")
 
 # SBERT
-similarity_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+similarity_model = SentenceTransformer('models/all-MiniLM-L6-v2', device='cpu')
 
 # BERT classifier
 bert_model_path = "models/bert_classifier"
@@ -96,4 +96,5 @@ if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
